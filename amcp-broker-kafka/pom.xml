@@ -33,6 +33,11 @@
             <groupId>io.cloudevents</groupId>
             <artifactId>cloudevents-kafka</artifactId>
         </dependency>
+        <!-- CloudEvents structured JSON wire format -->
+        <dependency>
+            <groupId>io.cloudevents</groupId>
+            <artifactId>cloudevents-json-jackson</artifactId>
+        </dependency>
 
         <!-- Logging -->
         <dependency>
@@ -57,4 +62,21 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Run unit tests and Kafka integration tests (*IT); the default includes skip *IT. -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <argLine>-Xmx512m</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

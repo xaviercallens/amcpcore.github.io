@@ -48,6 +48,16 @@ class EventTest {
     }
 
     @Test
+    void testDoubleStarRespectsSegmentBoundary() {
+        assertTrue(Event.create("p", "test").matchesTopic("p.**"), "p.** matches the bare prefix p");
+        assertTrue(Event.create("p.x", "test").matchesTopic("p.**"));
+        assertTrue(Event.create("p.x.y", "test").matchesTopic("p.**"));
+        assertFalse(Event.create("px", "test").matchesTopic("p.**"), "p.** must not match phive-style prefixes");
+        assertFalse(Event.create("phive.x", "test").matchesTopic("p.**"));
+        assertFalse(Event.create("other.p", "test").matchesTopic("p.**"));
+    }
+
+    @Test
     void testComplexPayload() {
         record TestData(String name, int value) {}
         

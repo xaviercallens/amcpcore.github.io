@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `EventBroker.subscribeQueue(topicPattern, queueName, handler)`: competing-consumer subscriptions. Each event is
+  delivered to one subscriber per queue name. The default implementation falls back to `subscribe`, so existing
+  brokers keep working. `InMemoryEventBroker` implements it round-robin.
+- `KafkaEventBroker` constructor `(bootstrap, groupId, instanceId, java.util.Properties extra)`. The extra properties
+  apply to the producer and to every consumer. The 3-argument constructor is unchanged.
+- `KafkaEventBroker` now uses the structured-mode CloudEvents JSON wire format, so topic, id, time, source and
+  payload survive the round trip. A malformed record is logged and skipped.
+
+### Fixed
+
+- Kafka topic names are now the AMCP topic strings verbatim, for both publish and subscribe. Previously publish used
+  `a.b.c` and subscribe used `a-b-c`, so the two never met.
+- A `KafkaEventBroker` consumer now keeps all its subscriptions. A new subscribe no longer replaces earlier ones.
+- Wildcard subscriptions use a Kafka `Pattern` (the union of all active patterns) instead of literal topic names.
+- Each `KafkaConsumer` is created, polled and closed by one dedicated thread. Subscribe and unsubscribe enqueue
+  changes and wake that thread. Handlers run on a separate virtual-thread executor. With no subscriptions the poll
+  loop idles quietly, with no "Consumer is not subscribed" error spam.
+- Received events keep their topic. Previously every record was rebuilt as `amcp.event`, so no subscription matched.
+- `Event.matchesTopic("p.**")` matches `p` and `p.<anything>` only. It no longer matches `phive...`.
+- `KafkaEventBroker.publish` completes only after Kafka acknowledges the record, and fails when the broker is not
+  running.
+
+- Review follow-ups on the Kafka transport (seven fixes):
+  1. A `KafkaConsumer` that cannot be built (for example `max.poll.records=abc` through the extra properties) now makes
+     `start()` return a failed future, or `subscribeQueue` throw `IllegalStateException` with the cause. Before, the
+     poll thread died silently and `start()` reported success. A dead worker is never left in the worker map.
+  2. A failed `consumer.subscribe/unsubscribe` no longer marks the pattern set as applied: the cause is logged once and
+     the update is retried with bounded backoff.
+  3. Delivery is now at-least-once: manual commit after the handlers of the polled batch finished (bounded wait of
+     30 s), rewind and redelivery of failed records, at most 3 attempts per record. Auto-commit used to commit on poll,
+     before the asynchronous handler ran, which was at-most-once. Handlers must be idempotent.
+  4. Queue mode: a record on an owned partition with no matching local subscription is still committed for the group
+     (a Kafka limitation), but a WARN is logged once per (topic, queue) pair, and the README requires every instance
+     sharing a queue name to subscribe the same patterns.
+  5. `Event.matchesTopic` and `TopicPatterns.toRegex` now agree on topics with empty segments: a wildcard never
+     matches a trailing dot or doubled dot. A table-driven test runs the same cases through both.
+  6. README: the topic-pickup time is stated in terms of `metadata.max.age.ms` (1 s here, plus a rebalance), and a
+     subscription takes effect shortly after `subscribe()` returns.
+  7. `InMemoryEventBroker.stop()` followed by `start()` no longer makes `publish` throw `RejectedExecutionException`.
+  Not done: the queue-mode drop in item 4 is documented and logged, not prevented.
+
+### Changed
+
+- `KafkaEventBroker.subscribe` (fan-out) skips events older than the subscription's creation time minus 5 seconds,
+  so a new broker instance does not replay history.
+- `KafkaEventBroker.stop` wakes and joins every poll thread, closes consumers and producer, and shuts the executor
+  down. Calling `start` or `stop` more than once is safe.
+
 ## [1.6.0] - 2024-11-10
 
 ### Added

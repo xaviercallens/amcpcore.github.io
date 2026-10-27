@@ -162,28 +162,34 @@ public class Event {
             return true;
         }
         
-        // Handle wildcards
+        // Handle wildcards. A wildcard never matches an empty segment, so topics with a trailing dot
+        // ("p.x.") or a doubled dot ("p..x") match only by exact equality. This is the same rule as
+        // io.amcp.broker.kafka.TopicPatterns.toRegex.
         if (pattern.endsWith(".**")) {
+            // "p.**" matches "p" itself and "p.<one or more non-empty segments>", never "px".
             String prefix = pattern.substring(0, pattern.length() - 3);
-            return topic.startsWith(prefix);
-        }
-        
-        if (pattern.endsWith(".*")) {
-            String prefix = pattern.substring(0, pattern.length() - 2);
-            String[] topicParts = topic.split("\\.");
-            String[] patternParts = prefix.split("\\.");
-            
-            if (topicParts.length == patternParts.length + 1) {
-                for (int i = 0; i < patternParts.length; i++) {
-                    if (!topicParts[i].equals(patternParts[i])) {
-                        return false;
-                    }
-                }
+            if (topic.equals(prefix)) {
                 return true;
             }
+            return topic.startsWith(prefix + ".") && nonEmptySegments(topic.substring(prefix.length() + 1));
         }
-        
+
+        if (pattern.endsWith(".*")) {
+            // "p.*" matches "p.<exactly one non-empty segment>".
+            String prefix = pattern.substring(0, pattern.length() - 2);
+            if (!topic.startsWith(prefix + ".")) {
+                return false;
+            }
+            String rest = topic.substring(prefix.length() + 1);
+            return !rest.isEmpty() && rest.indexOf('.') < 0;
+        }
+
         return false;
+    }
+
+    /** True when {@code rest} is one or more dot-separated segments and none of them is empty. */
+    private static boolean nonEmptySegments(String rest) {
+        return !rest.isEmpty() && !rest.startsWith(".") && !rest.endsWith(".") && !rest.contains("..");
     }
 
     @Override

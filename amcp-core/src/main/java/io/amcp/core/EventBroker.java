@@ -27,6 +27,24 @@ public interface EventBroker extends AutoCloseable {
     String subscribe(String topicPattern, Consumer<Event> handler);
 
     /**
+     * Subscribes to events matching the topic pattern as one member of a named queue
+     * (competing consumers). Each event is delivered to exactly one subscriber that shares
+     * the same queue name, instead of to every subscriber as {@link #subscribe} does.
+     *
+     * <p>The default implementation ignores {@code queueName} and falls back to
+     * {@link #subscribe(String, Consumer)}, which means fan-out delivery. Brokers that can
+     * distribute work across subscribers should override this method.
+     *
+     * @param topicPattern the topic pattern (supports wildcards like "hello.*")
+     * @param queueName    the queue name shared by the competing subscribers
+     * @param handler      the event handler
+     * @return a subscription ID that can be used to unsubscribe
+     */
+    default String subscribeQueue(String topicPattern, String queueName, Consumer<Event> handler) {
+        return subscribe(topicPattern, handler);
+    }
+
+    /**
      * Unsubscribes from a previously created subscription.
      *
      * @param subscriptionId the subscription ID
